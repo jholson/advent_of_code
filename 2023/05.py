@@ -1,10 +1,11 @@
 import bisect
+import functools
 import sys
 
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Deque, Dict, Iterable, List, Sequence, Tuple
+from typing import Deque, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 def main() -> None:
@@ -14,52 +15,109 @@ def main() -> None:
     print(result)
 
 
+@dataclass(frozen=True, slots=True)
+class RangeMapEntry(object):
+    key_start: int
+    val_start: int
+    range_len: int
+
+    def key_within_range(self, key: int) -> bool:
+        return self.key_start <= key < self.key_end_exclusive()
+
+    def key_end_exclusive(self) -> int:
+        return self.key_start + self.range_len
+
+    def val_end_exclusive(self) -> int:
+        return self.val_start + self.range_len
+
 class RangeMap(object):
-    def __init__(self) -> None:
-        # (key_range_start, value_range_start, range_len) sorted by key_range_start
-        self.key_to_value = []  # type: List[Tuple[int, int, int]]
+    def __init__(self, key_to_val: Optional[List[RangeMapEntry]] = None) -> None:
+        # RangeMapEntry's sorted by key_start field (ascending)
+        self.key_to_val: List[RangeMapEntry] = key_to_val or []
 
     def get_value_for_key(self, key: int) -> int:
-        # print(f'get value for {key}')
-
         # Find the entry index to the right of the key in question, then look at the entry just
         #  before that
-        entry_idx = bisect.bisect_right(self.key_to_value, key, key=lambda e: e[0])
+        entry_idx = bisect.bisect_right(self.key_to_val, key, key=lambda e: e.key_start)
         if entry_idx > 0:
-            key_range_start, value_range_start, range_len = self.key_to_value[entry_idx - 1]
-            # print(f'found entry starting at {key_range_start}')
-            if key_range_start <= key < key_range_start + range_len:
-                return value_range_start + (key - key_range_start)
+            entry = self.key_to_val[entry_idx - 1]
+            if entry.key_within_range(key):
+                return entry.val_start + (key - entry.key_start)
         
         return key
             
-    def add_mapping(self, key_range_start: int, value_range_start: int, range_len: int) -> None:
-        entry = (key_range_start, value_range_start, range_len)
-        bisect.insort(self.key_to_value, entry, key=lambda e: e[0])
+    def add_mapping(self, key_start: int, val_start: int, range_len: int) -> None:
+        entry = RangeMapEntry(key_start=key_start, val_start=val_start, range_len=range_len)
+        bisect.insort(self.key_to_val, entry, key=lambda e: e.key_start)
 
-    def flatten_with_next_map(self, next_map: RangeMap) -> RangeMap:
+    def flatten_with_next_map(self, next_map: 'RangeMap') -> 'RangeMap':
         """
         This map's values are next_map's keys
         """
-        new_list: List[Tuple[int, int, int]] = []
+        new_list: List[RangeMapEntry] = []
 
-        for this_key_start, this_value_start, this_range_len in self.key_to_value:
-            # Find the overlapping range(s) from next_map that apply to this range entry
-            next_overlaps = [
-                next_key_start, next_value_start, next_range_len
-                for (next_key_start, next_value_start, next_range_len) in next_map.key_to_value
-                # Check for range overlap
-                if (
-                    this_value_start + this_range_len - 1 >= next_key_start and
-                    next_key_start + next_range_len - 1 >= this_value_start
-                )
-            ]
+        # Running index into next_map, which is already sorted by key
+        next_idx = 0
+        next_e = next_map.key_to_val[next_idx]
 
-            idx = 0
-            while idx < len(next_overlaps):
-                next_overlap = next_overlaps[i]
+        # Iterate over this map's entries sorted by value (so this map and next
+        #  map will be ordered by the same unit basically
+        for this_e in sorted(self.key_to_val, key=lambda e: e.val_start):
+            # this_val_so_far indicates that the range [this_e.val_start, this_val_so_far) is
+            #  accounted for
+            this_val_so_far = this_e.val_start
+            while this_val_so_far < this_e.val_end_exclusive():
+                # Iterate through next_e until we're past any ranges that are completely before
+                #  this_val_so_far
+                while next_e and next_e.key_end_exclusive() <= this_val_so_far:
+                    next_idx += 1
+                    if next_idx < len(next_map.key_to_val):
+                        next_e = next_map.key_to_val[next_idx]
+                    else:
+                        next_e = None
 
-                # Insert a range *not* covered by next_overlap, if necessary
+                if next_e and next_e.key_start <= this_val_so_far:
+                    # next_e overlaps with this_val_so_far
+
+                    # ...but by how much?
+                    this_val_end_exclusive = min(
+                        next_e.key_end_exclusive(), this_e.val_end_exclusive()
+                    )
+                    new_range_len = this_val_end_exclusive - this_val_so_far
+                    new_val_start = next_e.val_start + (this_val_so_far - next_e.key_start)
+                    new_key_start = this_e.key_start + (this_val_so_far - this_e.val_start)
+
+                    new_list.append(RangeMapEntry(
+                        # TODO this is wrong, needs to be key and not value
+                        key_start=new_key_start,
+
+                        val_start=new_val_start,
+                        range_len=new_range_len,
+                    ))
+
+                    this_val_so_far = this_val_end_exclusive
+                else:
+                    # next_e starts after this_val_so_far, so we need a filler range (just the
+                    #  identity map)
+
+                    if next_e:
+                        new_val_end_exclusive = min(next_e.key_start, this_e.val_end_exclusive())
+                    else:
+                        new_val_end_exclusive = this_e.val_end_exclusive()
+                    new_range_len = new_val_end_exclusive - this_val_so_far
+                    new_key_start = this_e.key_start + (this_val_so_far - this_e.val_start)
+
+                    new_list.append(RangeMapEntry(
+                        # TODO this is wrong, needs to be key and not value
+                        key_start=new_key_start,
+
+                        val_start=this_val_so_far,
+                        range_len=new_range_len,
+                    ))
+
+                    this_val_so_far = new_val_end_exclusive
+
+        return RangeMap(new_list)
 
 @dataclass()
 class SeedMap(object):
@@ -162,8 +220,8 @@ def parse_range_map(lines: Deque[str]) -> RangeMap:
     range_map = RangeMap()
     while lines and not lines[0].endswith("map:"):
         line = lines.popleft()
-        value_range_start, key_range_start, range_len = [int(s) for s in line.split(" ")]
-        range_map.add_mapping(key_range_start, value_range_start, range_len)
+        val_start, key_start, range_len = [int(s) for s in line.split(" ")]
+        range_map.add_mapping(key_start, val_start, range_len)
 
     return range_map
 
@@ -177,8 +235,6 @@ def part1() -> int:
 
         locations.append(location)
 
-        # print(f'{seed} {soil} {fertilizer} {water} {light} {temperature} {humidity} {location}')
-
     return min(locations)
 
 
@@ -187,9 +243,22 @@ def part2() -> int:
 
     # Initialize this to the seed -> seed map, we'll successively flatten maps onto it until
     #  it's a seed -> location map
-    seed_location_map = seed_map.seed_ranges
+    seed_to_location_map = functools.reduce(
+        lambda r1, r2: r1.flatten_with_next_map(r2),
+        [
+            seed_map.seed_ranges,
+            seed_map.seed_to_soil,
+            seed_map.soil_to_fertilizer,
+            seed_map.fertilizer_to_water,
+            seed_map.water_to_light,
+            seed_map.light_to_temperature,
+            seed_map.temperature_to_humidity,
+            seed_map.humidity_to_location,
+        ])
 
-    return min_location
+    # Grab minimum val_start value from seed_to_location_map
+    return min(e.val_start for e in seed_to_location_map.key_to_val)
+
 
 if __name__ == '__main__':
     main()
