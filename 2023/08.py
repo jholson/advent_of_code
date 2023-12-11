@@ -1,3 +1,4 @@
+import math
 import sys
 
 from dataclasses import dataclass
@@ -71,32 +72,56 @@ def part2() -> int:
     """
 
     starts = [n for n in m.children if n.endswith('A')]
-    print(here)
-    dir_idx = 0
-    steps = 0
-    while not all(n.endswith('Z') for n in here):
+    cycle_lengths = []
 
-        direction = m.directions[dir_idx]
-        for i in range(len(here)):
-            left, right = m.children[here[i]]
+    for start in starts:
+        # print(f'Starting from {start}')
+
+        dir_idx = 0
+        steps = 0
+
+        # Map from (node, dir_idx) -> steps
+        seen_at_step: Dict[Tuple[str, int], int] = {}
+        z_step: int = None
+
+        here = start
+        seen_at_step[here] = 0
+
+        while True:
+            left, right = m.children[here]
+            direction = m.directions[dir_idx]
             if direction == 'L':
-                here[i] = left
+                here = left
             else:
-                here[i] = right
+                here = right
 
+            # print(here)
 
-        dir_idx = (dir_idx + 1) % len(m.directions)
-        steps += 1
+            dir_idx = (dir_idx + 1) % len(m.directions)
+            steps += 1
+    
+            key = (here, dir_idx)
+            if key in seen_at_step:
+                # Encountered a same node/dir_idx that was seen before
+                break
 
-        # print(here)
-        zees = [(i, n) for i, n in enumerate(here) if n.endswith('Z')]
-        if zees:
-            print(f'Step {steps}: Found end:')
-            for i, n in zees:
-                print(f'{i}: {n}')
-            print()
+            seen_at_step[key] = steps
 
-    return steps
+            if z_step is None and here.endswith('Z'):
+                z_step = steps
+
+        cycle_length = steps - seen_at_step[key]
+        if cycle_length != z_step:
+            raise ValueError("Simple LCM won't work here")
+
+        # print(f' Initial offset to cycle: {seen_at_step[key]}')
+        # print(f' Z node seen at: {z_step}')
+        # print(f' Cycle started at node {here} on step {seen_at_step[key]}, encountered second time on step {steps}')
+        # print(f' Cycle length: {cycle_length}')
+
+        cycle_lengths.append(cycle_length)
+
+    return math.lcm(*cycle_lengths)
 
 if __name__ == '__main__':
     main()
