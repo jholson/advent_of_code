@@ -1,8 +1,16 @@
-use std::collections::{HashMap, HashSet};
+use std::cmp::{min, max};
+use std::collections::HashSet;
 use std::io::{self, BufRead};
-// TODO: ^ Why BufRead if it's not used? What's self, just the io namespace?
 
 fn main() {
+    // let result = part1();
+    let result = part2();
+
+    println!("{result}");
+}
+
+#[allow(dead_code)]
+fn part1() -> usize {
     println!("Parse image");
     let img = parse_input();
     println!("  {} x {}", img.len(), img[0].len());
@@ -14,52 +22,115 @@ fn main() {
 
     // Find coords of galaxies
     println!("Find coords of galaxies");
-    let mut galaxies = Vec::new();
-
-    for i in 0..img.len() {
-        for j in 0..img[0].len() {
-            if img[i][j] == '#' {
-                galaxies.push((i, j));
-            }
-        }
-    }
+    let galaxies = find_galaxies(&img);
 
     // Find distances between each pair of galaxies
     println!("Find distances between each pair of galaxies");
-    let mut distances: HashMap<String, usize> = HashMap::new();
+    // let mut total_dist = 0;
+    // for x in 0..galaxies.len() {
+    //     for y in x+1..galaxies.len() {
+    //         let src = galaxies[x];
+    //         let dest = galaxies[y];
+
+    //         // Manhattan distance
+    //         total_dist += src.0.abs_diff(dest.0) + src.1.abs_diff(dest.1);
+    //     }
+    // }
+    // println!("  {:?}", distances);
+    // println!("  {:?}", distances.values());
+
+    let total_dist = galaxies
+        .iter()
+        .enumerate()
+        .flat_map(|(i, &src)| galaxies
+            .iter()
+            .skip(i + 1)
+            .map(move |&dest| src.0.abs_diff(dest.0) + src.1.abs_diff(dest.1))
+        )
+        .sum();
+
+    return total_dist;
+}
+
+fn part2() -> usize {
+    println!("Parse image");
+    let img = parse_input();
+    println!("  {} x {}", img.len(), img[0].len());
+
+    let (empty_rows, empty_cols) = find_empty_rows_and_cols(&img);
+
+    // Find coords of galaxies
+    println!("Find coords of galaxies");
+    let galaxies = find_galaxies(&img);
+
+    // Find distances between each pair of galaxies
+    println!("Find distances between each pair of galaxies");
+    let mut total_dist = 0;
+    let expansion_factor = 1_000_000;
     for x in 0..galaxies.len() {
         for y in x+1..galaxies.len() {
             let src = galaxies[x];
             let dest = galaxies[y];
-            let key = get_pair_key_str(&src, &dest);
 
             // Manhattan distance
-            let dist = abs_diff(src.0, dest.0) + abs_diff(src.1, dest.1);
-            distances.insert(key, dist);
+            total_dist += src.0.abs_diff(dest.0) + src.1.abs_diff(dest.1);
+            let num_empty_rows = empty_rows
+                .iter()
+                .filter(|&r| min(src.0, dest.0) < *r && *r < max(src.0, dest.0))
+                .count();
+            let num_empty_cols = empty_cols
+                .iter()
+                .filter(|&r| min(src.1, dest.1) < *r && *r < max(src.1, dest.1))
+                .count();
+
+            total_dist += (num_empty_rows + num_empty_cols) * (expansion_factor - 1);
         }
     }
     // println!("  {:?}", distances);
     // println!("  {:?}", distances.values());
 
-    println!("{}", distances.values().sum::<usize>());
+    return total_dist;
+}
+
+fn find_empty_rows_and_cols(img: &Vec<Vec<char>>) -> (Vec<usize>, Vec<usize>) {
+    /*
+    Returns vectors of row indexes and column indexes (respectively) that correspond to empty
+    rows/columns. Each vector sorted in ascending order.
+    */
+
+    let empty_rows = (0..img.len())
+        .into_iter()
+        .filter(|&i| img[i].iter().all(|&e| e == '.'))
+        .collect();
+
+    let empty_cols = (0..img[0].len())
+        .into_iter()
+        .filter(|&j| img.iter().all(|row| row[j] == '.'))
+        .collect();
+        
+    return (empty_rows, empty_cols);
+}
+
+fn find_galaxies(img: &Vec<Vec<char>>) -> Vec<(usize, usize)> {
+    return img
+        .iter()
+        .enumerate()
+        .flat_map(|(i, row)| row
+            .iter()
+            .enumerate()
+            .filter(|(_, &e)| e == '#')
+            .map(move |(j, _)| (i, j))
+        )
+        .collect();
 }
 
 fn expand_img(img: Vec<Vec<char>>) -> Vec<Vec<char>> {
-    // Find indexes of empty rows...
-    let mut empty_rows = HashSet::new();
-    for (i, row) in img.iter().enumerate() {
-        if row.iter().all(|&e| e == '.') {
-            empty_rows.insert(i);
-        }
-    }
-
-    // ...and empty columns
-    let mut empty_cols = HashSet::new();
-    for j in 0..img[0].len() {
-        if img.iter().all(|row| row[j] == '.') {
-            empty_cols.insert(j);
-        }
-    }
+    /*
+    Return a new image, with each empty row/column *doubled*
+    */
+    let (empty_rows, empty_cols) = find_empty_rows_and_cols(&img);
+    let empty_rows_set: HashSet<usize> = HashSet::from_iter(empty_rows);
+    let empty_cols_set: HashSet<usize> = HashSet::from_iter(empty_cols);
 
     let mut new_img: Vec<Vec<char>> = Vec::new();
     for i in 0..img.len() {
@@ -67,12 +138,12 @@ fn expand_img(img: Vec<Vec<char>>) -> Vec<Vec<char>> {
 
         for j in 0..img[0].len() {
             row.push(img[i][j]);
-            if empty_cols.contains(&j) {
+            if empty_cols_set.contains(&j) {
                 row.push(img[i][j]);
             }
         }
 
-        if empty_rows.contains(&i) {
+        if empty_rows_set.contains(&i) {
             let row_copy = row.to_vec();
             new_img.push(row);
             new_img.push(row_copy);
@@ -84,32 +155,9 @@ fn expand_img(img: Vec<Vec<char>>) -> Vec<Vec<char>> {
     return new_img;
 }
 
-fn abs_diff(a: usize, b: usize) -> usize {
-    if a > b {
-        return a - b;
-    } else {
-        return b - a;
-    }
-}
-
-fn get_key_str(galaxy: &(usize, usize)) -> String {
-    return format!("{}_{}", galaxy.0, galaxy.1);
-}
-
-fn get_pair_key_str(galaxy1: &(usize, usize), galaxy2: &(usize, usize)) -> String {
-    if galaxy1 < galaxy2 {
-        return format!("{}_{}__{}_{}", galaxy1.0, galaxy1.1, galaxy2.0, galaxy2.1);
-    } else {
-        return format!("{}_{}__{}_{}", galaxy2.0, galaxy2.1, galaxy1.0, galaxy1.1);
-    }
-}
-
 fn parse_input() -> Vec<Vec<char>> {
-    let mut lines: Vec<Vec<char>> = Vec::new();
-
-    for line in io::stdin().lock().lines() {
-        lines.push(line.unwrap().chars().collect());
-    }
-
-    return lines;
+    return io::stdin().lock().lines()
+        .into_iter()
+        .map(|line| line.unwrap().chars().collect())
+        .collect();
 }
