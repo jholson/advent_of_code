@@ -11,17 +11,6 @@ fn main() {
 }
 
 fn process_rows(rows: Vec<(Vec<char>, Vec<usize>)>) -> usize {
-    /*
-    Brute force:
-    1. Generate all possible positioning of the groups
-    2. Check each position against the springs to see if it's valid
-
-    Better:
-    Maybe dynamic programming?
-    Define a function `num_positions(...)` that takes in `spring_start_idx` and `group_start_idx`,
-    and returns the number of possible positions. Call recursively. Memoize the result.
-    */
-    
     rows.into_iter()
         .map(|(springs, groups)| {
             let mut cache = HashMap::new();
@@ -29,19 +18,6 @@ fn process_rows(rows: Vec<(Vec<char>, Vec<usize>)>) -> usize {
         })
         .sum()
 }
-
-// fn cache() -> &'static HashMap<String, usize> {
-//     static CACHE: OnceLock<HashMap<String, usize>> = OnceLock::new();
-//     CACHE.get_or_init(|| {
-//         let mut m = HashMap::new();
-//         m
-//     });
-//     CACHE.get_mut().unwrap()
-// }
-
-// lazy_static! {
-//     static ref CACHE: HashMap<String, usize> = HashMap::new();
-// }
 
 fn num_possible_positions(
     all_groups: &Vec<usize>,
