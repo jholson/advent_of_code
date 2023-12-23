@@ -1,9 +1,8 @@
-use std::collections::HashMap;
 use std::io::{self, BufRead};
 
 fn main() {
-    let result = part1();
-    // let result = part2();
+    // let result = part1();
+    let result = part2();
 
     println!("{result}");
 }
@@ -18,31 +17,43 @@ enum Dir {
 }
 
 struct Beam {
-    row: usize,
-    col: usize,
+    row: isize,
+    col: isize,
     dir: Dir,
 }
 
 #[allow(dead_code)]
 fn part1() -> usize {
     let grid = parse_input();
+    let start_beam = Beam { row: 0, col: 0, dir: Dir::Right };
+
+    count_energized(&grid, start_beam)
+}
+
+#[allow(dead_code)]
+fn count_energized(grid: &Vec<Vec<char>>, start_beam: Beam) -> usize {
     let mut energized: Vec<Vec<Vec<Dir>>> = vec![vec![vec![]; grid[0].len()]; grid.len()];
-    let mut beams = vec![Beam { row: 0, col: 0, dir: Dir::Right }];
+    let mut beams = vec![start_beam];
 
     while let Some(beam) = beams.pop() {
-        if beam.row < 0 || beam.row >= grid.len() || beam.col < 0 || beam.col >= grid[0].len() {
+        if beam.row < 0
+            || beam.row >= grid.len().try_into().unwrap()
+            || beam.col < 0
+            || beam.col >= grid[0].len().try_into().unwrap()
+        {
             // Beam out of bounds, ignore
             continue;
         }
 
-        if energized[beam.row][beam.col].contains(&beam.dir) {
+        let energized_dirs = &mut energized[beam.row as usize][beam.col as usize];
+        if energized_dirs.contains(&beam.dir) {
             // No need to continue propagating beam, this direction was already hit on this square
             continue;
         }
 
-        energized[beam.row][beam.col].push(beam.dir.clone());
+        energized_dirs.push(beam.dir.clone());
 
-        let grid_square = grid[beam.row][beam.col];
+        let grid_square = grid[beam.row as usize][beam.col as usize];
 
         match beam.dir {
             Dir::Up => {
@@ -120,10 +131,10 @@ fn part1() -> usize {
         }
     }
 
-    return energized
+    energized
         .into_iter()
         .flat_map(|row| row.into_iter().filter(|e| e.len() > 0))
-        .count();
+        .count()
 }
 
 
@@ -145,7 +156,25 @@ fn right(beam: &Beam) -> Beam {
 
 #[allow(dead_code)]
 fn part2() -> usize {
-    return 0;
+    let grid = parse_input();
+    let num_rows = grid.len() as isize;
+    let num_cols = grid[0].len() as isize;
+
+    (0..num_rows)
+        .flat_map(|row| [
+            Beam { row: row, col: 0, dir: Dir::Right },
+            Beam { row: row, col: num_cols - 1, dir: Dir::Left },
+        ])
+        .chain(
+            (0..num_cols)
+                .flat_map(|col| [
+                    Beam { row: 0, col: col, dir: Dir::Down },
+                    Beam { row: num_rows - 1, col: col, dir: Dir::Up },
+                ])
+        )
+        .map(|beam| count_energized(&grid, beam))
+        .max()
+        .unwrap()
 }
 
 fn parse_input() -> Vec<Vec<char>> {
