@@ -41,7 +41,6 @@ fn part1() -> usize {
     let grid = parse_input();
     let num_rows = grid.len();
     let num_cols = grid[0].len();
-    // let all_dirs = [Dir::Up, Dir::Down, Dir::Left, Dir::Right];
 
     // shortest[2][4][Dir::Down] is the shortest path to square (2,4) if the immediately previous
     //  path segment was 1-3 consecutive downs. The shortest value includes the square in question
@@ -52,7 +51,6 @@ fn part1() -> usize {
 
     // Initialize structures for 1-3 squares down and 1-3 squares right of the origin
     for entry in get_impacted_cells(0, 0, None, num_rows, num_cols) {
-        println!("Processing initial entry {:?}", entry);
         for next in get_impacted_cells(
             entry.row,
             entry.col,
@@ -62,7 +60,6 @@ fn part1() -> usize {
         )
         {
             if !in_queue.contains(&next) {
-                println!(" Enqueueing initial entry {:?}", next);
                 queue.push_back(next.clone());
                 in_queue.insert(next);
             }
@@ -72,10 +69,7 @@ fn part1() -> usize {
         shortest.insert(entry, Path { prev_row: 0, prev_col: 0, length: val });
     }
 
-    println!("Entering while loop");
-
     while let Some(entry) = queue.pop_front() {
-        println!("Processing {entry:?}");
         in_queue.remove(&entry);
 
         /* Calculate this grid square/direction's shortest path based on the direction the beam
@@ -93,7 +87,6 @@ fn part1() -> usize {
                 num_cols,
             )
             .into_iter()
-            .inspect(|(row, col)| println!("  Looking at cell ({},{})", row, col))
             .filter_map(|(row, col)| {
                 let path = orthogonal(entry.dir)
                     .into_iter()
@@ -120,7 +113,6 @@ fn part1() -> usize {
         if let Some(new_min_length) = new_min_length {
             let old_min_length = shortest.get(&entry);
             if old_min_length.is_none() || new_min_length.length < (*old_min_length.unwrap()).length {
-                println!(" Updating shortest path for {:?} to {}", entry, new_min_length.length);
                 // If the shortest path changed, find the possibly-impacted descendant squares and
                 //  put them on the queue
                 for next in get_impacted_cells(
@@ -132,7 +124,6 @@ fn part1() -> usize {
                 )
                 {
                     if !in_queue.contains(&next) {
-                        println!(" Pushing {:?} to queue", next);
                         queue.push_back(next.clone());
                         in_queue.insert(next);
                     }
@@ -152,47 +143,6 @@ fn part1() -> usize {
         }))
         .min_by_key(|p| p.length)
         .unwrap();
-
-    // println!("Working backwards through path:");
-    // let mut path_sequence = vec![final_shortest_path];
-    // let mut last_coords = (grid.len() - 1, grid[0].len() - 1);
-    // let mut last_path = final_shortest_path;
-    // while !(last_path.prev_row == 0 && last_path.prev_col == 0) {
-    //     println!(" {:?}", last_path);
-    //     last_coords = (last_path.prev_row, last_path.prev_col);
-    //     last_path = ALL_DIRS
-    //         .into_iter()
-    //         .filter_map(|d| shortest.get(&Entry {
-    //             row: last_path.prev_row,
-    //             col: last_path.prev_col,
-    //             dir: d
-    //         }))
-    //         .inspect(|p| println!("  Comp: {:?}", p))
-    //         .filter(|p| p.length == last_path.length - get_path_sum_between(
-    //             &grid,
-    //             last_path.prev_row,
-    //             last_path.prev_col,
-    //             last_coords.0,
-    //             last_coords.1,
-    //         ))
-    //         .next()
-    //         .unwrap();
-    //     path_sequence.push(last_path);
-    // }
-
-    // println!("{:?}", path_sequence);
-
-    for i in 0..3 {
-        for j in 0..3 {
-            println!("Shortest paths for ({},{})", i, j);
-            for dir in ALL_DIRS {
-                let entry = Entry { row: i, col: j, dir: dir };
-                if let Some(path) = shortest.get(&entry) {
-                    println!(" {:?} => {:?}", entry, path);
-                }
-            }
-        }
-    }
 
     return final_shortest_path.length;
 }
@@ -268,14 +218,6 @@ fn get_impacted_cells(
         )
         .collect()
     }
-
-    // None.into_iter()
-    //     .chain(get_cells_in_direction(row, col, Dir::Up, Where::To, num_rows, num_cols))
-    //     .chain(get_cells_in_direction(row, col, Dir::Down, Where::To, num_rows, num_cols))
-    //     .chain(get_cells_in_direction(row, col, Dir::Left, Where::To, num_rows, num_cols))
-    //     .chain(get_cells_in_direction(row, col, Dir::Right, Where::To, num_rows, num_cols))
-    //     .filter(|&ref entry| if prev_dir.is_some() { entry.dir != *(prev_dir.unwrap()) } else { true })
-    //     .collect()
 }
 
 fn opposite(
@@ -298,25 +240,25 @@ fn get_cells_in_direction(
 ) -> Vec<(usize, usize)> {
     match dir {
         Dir::Up => {
-            (1..=3)
+            (4..=10)
                 .filter_map(|x| row.checked_sub(x))
                 .map(|r| (r, col))
                 .collect()
         },
         Dir::Down => { 
-            (1..=3)
+            (4..=10)
                 .filter_map(|x| if row + x < num_rows { Some(row + x) } else { None })
                 .map(|r| (r, col))
                 .collect()
         },
         Dir::Left => {
-            (1..=3)
+            (4..=10)
                 .filter_map(|x| col.checked_sub(x))
                 .map(|c| (row, c))
                 .collect()
         },
         Dir::Right => {
-            (1..=3)
+            (4..=10)
                 .filter_map(|x| if col + x < num_cols { Some(col + x) } else { None })
                 .map(|c| (row, c))
                 .collect()
